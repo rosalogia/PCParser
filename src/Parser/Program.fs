@@ -29,14 +29,14 @@ type Statement =
     | HALT
 and Block = Statement list
 
+let pword s = pstring s .>> spaces
 
 let pidentifier: Parser<string, Unit> =
     many1Satisfy2 (System.Char.IsLetter) (System.Char.IsWhiteSpace >> not)
     .>> spaces
 
 let pread: Parser<Statement, Unit> =
-    pstring "READ"
-    .>> spaces
+    pword "READ"
     >>. pidentifier
     |>> READ
 
@@ -74,7 +74,7 @@ let assumeIntToBool f x y =
 // This is safe, since the parser will never pass non-Integers to this function
 let intOperatorParser = new OperatorPrecedenceParser<Value,Unit,Unit>()
 let intexpr = intOperatorParser.ExpressionParser
-let intterm = (pintval .>> spaces) <|> between (pstring "(" >>. spaces) (pstring ")" >>. spaces) intexpr
+let intterm = (pintval .>> spaces) <|> between (pword "(") (pword ")") intexpr
 intOperatorParser.TermParser <- intterm
 
 intOperatorParser.AddOperator(InfixOperator(">",    spaces, 1, Associativity.Left, assumeIntToBool (>)))
@@ -96,7 +96,7 @@ let assumeBool f p q =
 
 let boolOperatorParser = new OperatorPrecedenceParser<Value,Unit,Unit>()
 let boolexpr = boolOperatorParser.ExpressionParser
-let boolterm = (pboolval .>> spaces) <|> between (pstring "(" >>. spaces) (pstring ")" >>. spaces) boolexpr
+let boolterm = (pboolval .>> spaces) <|> between (pword "(") (pword ")") boolexpr
 boolOperatorParser.TermParser <- boolterm
 
 boolOperatorParser.AddOperator(InfixOperator("AND", spaces, 1, Associativity.Left, assumeBool (&&)))
@@ -110,18 +110,17 @@ let poperation  = choice [intexpr ; boolexpr] |>> Literal
 let rec pexpression: Parser<Expr, Unit> = choice [poperation ; pliteral ; pvariable]
 
 let pdisplay: Parser<Statement, Unit> =
-    pstring "DISPLAY"
-    .>> spaces
+    pword "DISPLAY"
     >>. pexpression
     |>> DISPLAY
 
 let pset: Parser<Statement, Unit> =
-    let ident = between (pstring "SET" .>> spaces) (pstring "AS" .>> spaces) pidentifier
+    let ident = between (pword "SET") (pword "AS") pidentifier
 
     pipe2 ident (pvariable <|> pliteral) (fun name value -> SET (name, value))
 
 let pcompute: Parser<Statement, Unit> =
-    let ident = between (pstring "COMPUTE" .>> spaces) (pstring "AS" .>> spaces) pidentifier
+    let ident = between (pword "COMPUTE") (pword "AS") pidentifier
 
     pipe2 ident pexpression (fun name expression -> COMPUTE (name, expression))
 
@@ -140,16 +139,24 @@ let pif: Parser<Statement, Unit> =
         .>> spaces
     
     let parseElse =
-        pstring "ELSE"
-        .>> spaces
-        >>. manyTill (psinglestatement .>> spaces) (pstring "ENDIF" .>> spaces)
+        pword "ELSE"
+        >>. manyTill (psinglestatement .>> spaces) (pword "ENDIF")
 
-    let condition = between (pstring "IF" .>> spaces) (pstring "THEN" .>> spaces) pexpression
+    let condition = between (pword "IF") (pword "THEN") pexpression
     let inner1 = manyTill (psinglestatement .>> spaces) parseElseOrEnd
 
     pipe3 condition inner1 (opt parseElse) (fun cond in1 in2 -> IF (cond, in1, in2))
+
+let pwhile: Parser<Statement, Unit> =
+    let condition =
+        (pword "WHILE")
+        >>. pexpression
+    let inner = manyTill (psinglestatement .>> spaces) (pword "ENDIF")
+
+    pipe2 condition inner (fun cond block -> WHILE (cond, block))
     
 
+let pallstatements = choice [pif ; pwhile; psinglestatement]
 
 let test p str =
     match run p str with
@@ -157,6 +164,8 @@ let test p str =
     | Failure(errorMsg, _, _) -> printfn "Failure: %s" errorMsg
 
 [<EntryPoint>]
-let main _ =
-    test pif "IF 3 > 5 THEN DISPLAY 3 ENDIF"
+let main argv =
+    argv
+    |> String.concat "+"
+    |> test (manyTill pallstatements (pword "HALT"))
     0
