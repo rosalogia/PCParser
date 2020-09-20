@@ -4,6 +4,7 @@ open System
 open FParsec
 open FParsec.Primitives
 open FParsec.CharParsers
+open System.Text
 
 type Name = string
 
@@ -12,10 +13,25 @@ type Value =
     | String    of string
     | Bool      of bool
 
+type Operator =
+    | ADD
+    | SUBTRACT
+    | MULTIPLY
+    | DIVIDE
+    | MODULUS
+    | GT
+    | LT
+    | GTE
+    | LTE
+    | EQUALS
+    | NOTEQUALS
+    | NOT
+    | AND
+    | OR
 type Expr =
     | Literal   of Value
     | Variable  of Name
-    | Operation of Expr * string * Expr
+    | Operation of Expr * Operator * Expr
 
 type Statement =
     | READ      of Name
@@ -45,9 +61,10 @@ let pbool: Parser<bool, Unit> =
     |>> System.Boolean.Parse
 
 let pstringliteral: Parser<string, Unit> =
-    let quote = pchar '\"'
-    between quote quote (many anyChar)
-    |>> string
+    // let quote = pchar '\"'
+    // let words = between quote quote (manyChars anyChar)
+    let words = pchar '\"' >>. manyCharsTill anyChar (pchar '\"')
+    words |>> string
 
 let pintval: Parser<Value, Unit>    =   pint64          |>> int     |>> Integer
 let pstringval: Parser<Value, Unit> =   pstringliteral  |>> String
@@ -70,44 +87,49 @@ let assumeIntToBool f x y =
     | Integer a ->  match y with
                     | Integer b -> Bool (f a b)
 
+let createOperation op x y = Operation (x, op, y)
+
+let pvariable   = pidentifier |>> Variable
+let pliteral    = pvalue |>> Literal
 
 // This is safe, since the parser will never pass non-Integers to this function
-let intOperatorParser = new OperatorPrecedenceParser<Value,Unit,Unit>()
+let intOperatorParser = new OperatorPrecedenceParser<Expr,Unit,Unit>()
 let intexpr = intOperatorParser.ExpressionParser
-let intterm = (pintval .>> spaces) <|> between (pword "(") (pword ")") intexpr
+let intterm = (pintval .>> spaces |>> Literal <|> pvariable) <|> between (pword "(") (pword ")") intexpr
 intOperatorParser.TermParser <- intterm
 
-intOperatorParser.AddOperator(InfixOperator(">",    spaces, 1, Associativity.Left, assumeIntToBool (>)))
-intOperatorParser.AddOperator(InfixOperator("<",    spaces, 1, Associativity.Left, assumeIntToBool (<)))
-intOperatorParser.AddOperator(InfixOperator(">=",   spaces, 1, Associativity.Left, assumeIntToBool (>=)))
-intOperatorParser.AddOperator(InfixOperator("<=",   spaces, 1, Associativity.Left, assumeIntToBool (<=)))
-intOperatorParser.AddOperator(InfixOperator("==",   spaces, 1, Associativity.Left, assumeIntToBool (=)))
-intOperatorParser.AddOperator(InfixOperator("!=",   spaces, 1, Associativity.Left, assumeIntToBool (<>)))
-intOperatorParser.AddOperator(InfixOperator("+",    spaces, 2, Associativity.Left, assumeInt (+)))
-intOperatorParser.AddOperator(InfixOperator("-",    spaces, 2, Associativity.Left, assumeInt (-)))
-intOperatorParser.AddOperator(InfixOperator("*",    spaces, 3, Associativity.Left, assumeInt (*)))
-intOperatorParser.AddOperator(InfixOperator("/",    spaces, 3, Associativity.Left, assumeInt (/)))
-intOperatorParser.AddOperator(InfixOperator("MOD",  spaces, 3, Associativity.Left, assumeInt (%)))
+intOperatorParser.AddOperator(InfixOperator(">",    spaces, 1, Associativity.Left, (createOperation GT)))
+intOperatorParser.AddOperator(InfixOperator("<",    spaces, 1, Associativity.Left, (createOperation LT)))
+intOperatorParser.AddOperator(InfixOperator(">=",   spaces, 1, Associativity.Left, (createOperation GTE)))
+intOperatorParser.AddOperator(InfixOperator("<=",   spaces, 1, Associativity.Left, (createOperation LTE)))
+intOperatorParser.AddOperator(InfixOperator("==",   spaces, 1, Associativity.Left, (createOperation EQUALS)))
+intOperatorParser.AddOperator(InfixOperator("!=",   spaces, 1, Associativity.Left, (createOperation NOTEQUALS)))
+intOperatorParser.AddOperator(InfixOperator("+",    spaces, 2, Associativity.Left, (createOperation ADD)))
+intOperatorParser.AddOperator(InfixOperator("-",    spaces, 2, Associativity.Left, (createOperation SUBTRACT)))
+intOperatorParser.AddOperator(InfixOperator("*",    spaces, 3, Associativity.Left, (createOperation MULTIPLY)))
+intOperatorParser.AddOperator(InfixOperator("/",    spaces, 3, Associativity.Left, (createOperation DIVIDE)))
+intOperatorParser.AddOperator(InfixOperator("MODULUS",  spaces, 3, Associativity.Left, (createOperation MODULUS)))
 
 let assumeBool f p q =
     match p with
     | Bool a -> match q with
                 | Bool b -> Bool (f a b)
 
-let boolOperatorParser = new OperatorPrecedenceParser<Value,Unit,Unit>()
+let boolOperatorParser = new OperatorPrecedenceParser<Expr,Unit,Unit>()
 let boolexpr = boolOperatorParser.ExpressionParser
-let boolterm = (pboolval .>> spaces) <|> between (pword "(") (pword ")") boolexpr
+let boolterm = (pboolval .>> spaces |>> Literal) <|> between (pword "(") (pword ")") boolexpr
 boolOperatorParser.TermParser <- boolterm
 
-boolOperatorParser.AddOperator(InfixOperator("AND", spaces, 1, Associativity.Left, assumeBool (&&)))
-boolOperatorParser.AddOperator(InfixOperator("OR",  spaces, 1, Associativity.Left, assumeBool (||)))
-boolOperatorParser.AddOperator(PrefixOperator("NOT",spaces, 1, false, function (Bool p) -> Bool (not p)))
+boolOperatorParser.AddOperator(InfixOperator("AND", spaces, 1, Associativity.Left, (createOperation AND)))
+boolOperatorParser.AddOperator(InfixOperator("OR",  spaces, 1, Associativity.Left, (createOperation OR)))
+// boolOperatorParser.AddOperator(PrefixOperator("NOT",spaces, 1, false, function (Bool p) -> Bool (not p)))
 
-let pvariable   = pidentifier |>> Variable
-let pliteral    = pvalue |>> Literal
-let poperation  = choice [intexpr ; boolexpr] |>> Literal
+
+let poperation  = choice [ intexpr ]
 
 let rec pexpression: Parser<Expr, Unit> = choice [poperation ; pliteral ; pvariable]
+
+let pstatement, pstatementref = createParserForwardedToRef<Statement, Unit>()
 
 let pdisplay: Parser<Statement, Unit> =
     pword "DISPLAY"
@@ -117,20 +139,22 @@ let pdisplay: Parser<Statement, Unit> =
 let pset: Parser<Statement, Unit> =
     let ident = between (pword "SET") (pword "AS") pidentifier
 
-    pipe2 ident (pvariable <|> pliteral) (fun name value -> SET (name, value))
+    let setval = pexpression
+
+    pipe2 ident setval (fun name value -> SET (name, value))
 
 let pcompute: Parser<Statement, Unit> =
     let ident = between (pword "COMPUTE") (pword "AS") pidentifier
 
     pipe2 ident pexpression (fun name expression -> COMPUTE (name, expression))
 
-let psinglestatement: Parser<Statement, Unit> =
+let psinglestatement =
     choice [
         pread
         pdisplay
         pset
         pcompute
-    ]
+    ] |> ref
 
 let pif: Parser<Statement, Unit> =
     let parseElseOrEnd =
@@ -140,10 +164,10 @@ let pif: Parser<Statement, Unit> =
     
     let parseElse =
         pword "ELSE"
-        >>. manyTill (psinglestatement .>> spaces) (pword "ENDIF")
+        >>. manyTill (pstatement .>> spaces) (pword "ENDIF")
 
     let condition = between (pword "IF") (pword "THEN") pexpression
-    let inner1 = manyTill (psinglestatement .>> spaces) parseElseOrEnd
+    let inner1 = manyTill (pstatement .>> spaces) parseElseOrEnd
 
     pipe3 condition inner1 (opt parseElse) (fun cond in1 in2 -> IF (cond, in1, in2))
 
@@ -151,21 +175,36 @@ let pwhile: Parser<Statement, Unit> =
     let condition =
         (pword "WHILE")
         >>. pexpression
-    let inner = manyTill (psinglestatement .>> spaces) (pword "ENDIF")
+    let inner = manyTill (pstatement .>> spaces) (pword "ENDWHILE")
 
     pipe2 condition inner (fun cond block -> WHILE (cond, block))
-    
 
-let pallstatements = choice [pif ; pwhile; psinglestatement]
+do pstatementref := choice [
+    pread
+    pdisplay
+    pset
+    pcompute
+    pif
+    pwhile
+]
+
+
+// psinglestatement := choice [pif ; pwhile; !psinglestatement]
 
 let test p str =
-    match run p str with
+    match runParserOnFile p () str Encoding.ASCII with
     | Success(result, _, _)   -> printfn "Success: %A" result
     | Failure(errorMsg, _, _) -> printfn "Failure: %s" errorMsg
+
+let testSingle p str =
+    match run p str with
+    | Success (result, _, _) -> printfn "Success: %A" result
+    | Failure (error, _, _)  -> printfn "Failure: %s" error
 
 [<EntryPoint>]
 let main argv =
     argv
     |> String.concat "+"
-    |> test (manyTill pallstatements (pword "HALT"))
+    // |> testSingle pstatement 
+    |> test (manyTill pstatement (pword "HALT"))
     0
