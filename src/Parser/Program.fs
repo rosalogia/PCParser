@@ -1,9 +1,4 @@
-﻿// Learn more about F# at http://fsharp.org
-
-open System
-open FParsec
-open FParsec.Primitives
-open FParsec.CharParsers
+﻿open FParsec
 open System.Text
 
 type Name = string
@@ -41,7 +36,7 @@ type Statement =
     | IF        of Expr * Block * Block option
     | WHILE     of Expr * Block
     | DOWHILE   of Block * Expr
-    | REPEAT    of Expr * Block
+    | REPEAT    of Block * Expr
     | HALT
 and Block = Statement list
 
@@ -61,8 +56,6 @@ let pbool: Parser<bool, Unit> =
     |>> System.Boolean.Parse
 
 let pstringliteral: Parser<string, Unit> =
-    // let quote = pchar '\"'
-    // let words = between quote quote (manyChars anyChar)
     let words = pchar '\"' >>. manyCharsTill anyChar (pchar '\"')
     words |>> string
 
@@ -148,14 +141,6 @@ let pcompute: Parser<Statement, Unit> =
 
     pipe2 ident pexpression (fun name expression -> COMPUTE (name, expression))
 
-let psinglestatement =
-    choice [
-        pread
-        pdisplay
-        pset
-        pcompute
-    ] |> ref
-
 let pif: Parser<Statement, Unit> =
     let parseElseOrEnd =
         (pstring "ELSE" <|> pstring "ENDIF")
@@ -174,10 +159,28 @@ let pif: Parser<Statement, Unit> =
 let pwhile: Parser<Statement, Unit> =
     let condition =
         (pword "WHILE")
-        >>. pexpression
+        >>. between (pstring "(") (pstring ")") pexpression
     let inner = manyTill (pstatement .>> spaces) (pword "ENDWHILE")
 
     pipe2 condition inner (fun cond block -> WHILE (cond, block))
+
+let dowhile: Parser<Statement, Unit> =
+    let inner =
+        (pword "DO")
+        >>. manyTill (pstatement .>> spaces) (pword "WHILE")
+    
+    let condition = between (pstring "(") (pstring ")") pexpression
+
+    pipe2 inner condition (fun block cond -> DOWHILE (block, cond))
+
+let repeat: Parser<Statement, Unit> =
+    let inner =
+        (pword "REPEAT")
+        >>. manyTill (pstatement .>> spaces) (pword "UNTIL")
+    
+    let condition = between (pstring "(") (pstring ")") pexpression
+
+    pipe2 inner condition (fun block cond -> REPEAT (block, cond))
 
 do pstatementref := choice [
     pread
@@ -188,9 +191,6 @@ do pstatementref := choice [
     pwhile
 ]
 
-
-// psinglestatement := choice [pif ; pwhile; !psinglestatement]
-
 let test p str =
     match runParserOnFile p () str Encoding.ASCII with
     | Success(result, _, _)   -> printfn "Success: %A" result
@@ -200,6 +200,9 @@ let testSingle p str =
     match run p str with
     | Success (result, _, _) -> printfn "Success: %A" result
     | Failure (error, _, _)  -> printfn "Failure: %s" error
+
+let parsePCFile path =
+    runParserOnFile (manyTill pstatement (pword "HALT")) () path Encoding.ASCII
 
 [<EntryPoint>]
 let main argv =
