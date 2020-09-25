@@ -1,12 +1,14 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Library</OutputType>
     <TargetFramework>netcoreapp3.1</TargetFramework>
   </PropertyGroup>
-  <Import Project="../../.paket/Paket.Restore.targets"/>
-
   <ItemGroup>
+    <Compile Include="Types.fs" />
+    <Compile Include="Base.fs" />
+    <Compile Include="Operations.fs" />
+    <Compile Include="Statements.fs" />
     <Compile Include="Library.fs" />
   </ItemGroup>
-
+  <Import Project="../../.paket/Paket.Restore.targets" />
 </Project>
