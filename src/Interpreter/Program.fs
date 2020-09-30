@@ -30,11 +30,11 @@ let intOperation op x y =
                         | Integer b         -> Value.String (sprintf "%s%i" a b)
                         | Value.String b    -> Value.String (sprintf "%s%s" a b)
 
-let add = intOperation (+)
-
-let subtract = intOperation (-)
-
-let modulus = intOperation (%)
+let add         = intOperation (+)
+let subtract    = intOperation (-)
+let modulus     = intOperation (%)
+let multiply    = intOperation (*)
+let divide      = intOperation (/)
 
 let compare comparison x y =
     match x with
@@ -46,27 +46,31 @@ let comparator f x y =
     | Bool a    ->  match y with
                     | Bool b    -> Bool (f a b)
 
-let andOp = comparator (&&)
-let orOp = comparator (||)
+let andOp   = comparator (&&)
+let orOp    = comparator (||)
 
 let gt  = compare (>)
 let lt  = compare (<)
 let gte = compare (>=)
 let lte = compare (<=)
 let eq  = compare (=)
+let neq = compare (<>)
 
 let mapOperator op =
     match op with
-    | ADD   -> add
-    | SUBTRACT -> subtract
-    | GT    -> gt
-    | LT    -> lt
-    | GTE   -> gte
-    | LTE   -> lte
-    | AND   -> andOp
-    | OR    -> orOp
-    | EQUALS -> eq
-    | MODULUS -> modulus
+    | ADD       -> add
+    | SUBTRACT  -> subtract
+    | MULTIPLY  -> multiply
+    | DIVIDE    -> divide
+    | MODULUS   -> modulus
+    | GT        -> gt
+    | LT        -> lt
+    | GTE       -> gte
+    | LTE       -> lte
+    | EQUALS    -> eq
+    | NOTEQUALS -> neq
+    | AND       -> andOp
+    | OR        -> orOp
 
 let rec applyOperator state op e1 e2 =
     let reduceToValue exp =
