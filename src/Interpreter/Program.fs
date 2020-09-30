@@ -1,15 +1,14 @@
-﻿open PCParser.Parser
+﻿open PCParser.Parser.Types
+open PCParser.Parser.Interface
 open System
 
-type ProgramState = {VariableTable: (Name * Value) list; Operations: int}
+type ProgramState = {VariableTable: (Name * Value) list}
 
 let lookupVariable state name =
     state.VariableTable
     |> List.filter (fun (n, _) -> n = name)
     |> List.map snd
     |> List.head
-
-let incrementOps state = {state with Operations = state.Operations + 1}
 
 let printValue value =
     match value with
@@ -22,14 +21,20 @@ let interpretConditionalValue value =
     | Bool b    -> b
     | _         -> true
 
-let add x y =
+let intOperation op x y =
     match x with
     | Integer a     ->  match y with
-                        | Integer b         -> Integer (a + b)
+                        | Integer b         -> Integer (op a b)
                         | Value.String b    -> Value.String (sprintf "%i%s" a b)
     | Value.String a->  match y with
                         | Integer b         -> Value.String (sprintf "%s%i" a b)
                         | Value.String b    -> Value.String (sprintf "%s%s" a b)
+
+let add = intOperation (+)
+
+let subtract = intOperation (-)
+
+let modulus = intOperation (%)
 
 let compare comparison x y =
     match x with
@@ -44,16 +49,24 @@ let comparator f x y =
 let andOp = comparator (&&)
 let orOp = comparator (||)
 
-let gt = compare (>)
-let lt = compare (<)
+let gt  = compare (>)
+let lt  = compare (<)
+let gte = compare (>=)
+let lte = compare (<=)
+let eq  = compare (=)
 
 let mapOperator op =
     match op with
     | ADD   -> add
+    | SUBTRACT -> subtract
     | GT    -> gt
     | LT    -> lt
+    | GTE   -> gte
+    | LTE   -> lte
     | AND   -> andOp
     | OR    -> orOp
+    | EQUALS -> eq
+    | MODULUS -> modulus
 
 let rec applyOperator state op e1 e2 =
     let reduceToValue exp =
@@ -74,10 +87,10 @@ let rec runStatement state s =
     match s with
     | DISPLAY exp ->
         printValue (evaluateExpression state exp)
-        incrementOps state
+        state
     | SET (name, exp) ->
         let eValue = evaluateExpression state exp
-        incrementOps {state with VariableTable = (name, eValue) :: state.VariableTable}
+        {state with VariableTable = (name, eValue) :: state.VariableTable}
     | READ name ->
         let input = Console.ReadLine()
         
@@ -96,13 +109,23 @@ let rec runStatement state s =
                     | Bool b    -> Bool b
                     | _         -> Value.String input
         
-        incrementOps {state with VariableTable = (name, value) :: state.VariableTable}
-    | IF (cond, _, None) when not (cond |> evaluateExpression state |> interpretConditionalValue) ->
-        incrementOps state
+        {state with VariableTable = (name, value) :: state.VariableTable}
+    | IF (cond, _, None) when not (cond |> evaluateExpression state |> interpretConditionalValue) -> state
     | IF (cond, _, Some (elseBlock)) when not (cond |> evaluateExpression state |> interpretConditionalValue) ->
-        runStatements elseBlock (incrementOps state)
+        runStatements elseBlock state
     | IF (_, block, _)  ->
-        runStatements block (incrementOps state)
+        runStatements block state
+    | COMPUTE (name, exp) ->
+        let eValue = evaluateExpression state exp
+        {state with VariableTable = (name, eValue) :: state.VariableTable}
+    | WHILE (cond, _) when not (cond |> evaluateExpression state |> interpretConditionalValue) -> state
+    | WHILE (cond, block) ->
+        let rec innerLoop innerState =
+            match (cond |> evaluateExpression innerState |> interpretConditionalValue) with
+            | true -> runStatements block innerState |> innerLoop
+            | false -> innerState
+        
+        innerLoop state
 
 and runStatements statements state =
     match statements with
@@ -117,8 +140,7 @@ and runStatements statements state =
 
 
 let runProgram statements state =
-    let finalState = runStatements statements state
-    printfn "Operations: %i" finalState.Operations
+    runStatements statements state |> ignore
     0
 
 [<EntryPoint>]
@@ -128,7 +150,10 @@ let main argv =
     |> fun path ->  match parsePCFile path with
                     | Ok result ->
                         printfn "Success: %A" result
-                        runProgram result {VariableTable = []; Operations = 0}
+                        runProgram result {VariableTable = []}
                     | Error err ->
                         printfn "Error: %A" err
                         1
+    // |> testSingle (pchar '(' >>. pexpression .>> pchar ')')
+    // |> ignore
+    // 0

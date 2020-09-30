@@ -7,7 +7,7 @@ module Base =
     let pword s = pstring s .>> spaces
 
     let pidentifier: Parser<string, Unit> =
-        many1Satisfy2 (System.Char.IsLetter) (System.Char.IsWhiteSpace >> not)
+        many1Satisfy2 (System.Char.IsLetter) (System.Char.IsLetterOrDigit)
         .>> spaces
 
     let pbool: Parser<bool, Unit> =

@@ -19,7 +19,7 @@ module Statements =
         |>> DISPLAY
 
     let pset: Parser<Statement, Unit> =
-        let ident = between (pword "SET") (pword "AS") pidentifier
+        let ident = between (pword "SET") (pword "TO") pidentifier
 
         let setval = pexpression
 
@@ -48,7 +48,8 @@ module Statements =
     let pwhile: Parser<Statement, Unit> =
         let condition =
             (pword "WHILE")
-            >>. between (pstring "(") (pstring ")") pexpression
+            >>. between (pword "(") (pword ")") pexpression
+            .>> spaces
         let inner = manyTill (pstatement .>> spaces) (pword "ENDWHILE")
 
         pipe2 condition inner (fun cond block -> WHILE (cond, block))
