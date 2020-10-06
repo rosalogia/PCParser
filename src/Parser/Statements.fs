@@ -32,24 +32,24 @@ module Statements =
 
     let pif: Parser<Statement, Unit> =
         let parseElseOrEnd =
-            (pstring "ELSE" <|> pstring "ENDIF")
-            |> followedBy
-            .>> spaces
+            (pword "ELSE" <|> pword "ENDIF")
         
         let parseElse =
             pword "ELSE"
-            >>. manyTill (pstatement .>> spaces) (pword "ENDIF")
+            >>. many (notFollowedBy parseElseOrEnd >>. pstatement .>> spaces)
 
         let condition = between (pword "IF") (pword "THEN") pexpression
-        let inner1 = manyTill (pstatement .>> spaces) parseElseOrEnd
+        let inner1 = many (notFollowedBy parseElseOrEnd >>. pstatement .>> spaces) 
+        let elseOption = opt parseElse
+        
+        pipe3 condition inner1 elseOption (fun cond in1 in2 -> IF (cond, in1, in2)) .>> pword "ENDIF"
 
-        pipe3 condition inner1 (opt parseElse) (fun cond in1 in2 -> IF (cond, in1, in2))
+
 
     let pwhile: Parser<Statement, Unit> =
         let condition =
             (pword "WHILE")
             >>. between (pword "(") (pword ")") pexpression
-            .>> spaces
         let inner = manyTill (pstatement .>> spaces) (pword "ENDWHILE")
 
         pipe2 condition inner (fun cond block -> WHILE (cond, block))
@@ -81,9 +81,9 @@ module Statements =
         pdisplay
         pset
         pcompute
-        pif
         pwhile
         pdowhile
         prepeat
+        pif
         phalt
     ]

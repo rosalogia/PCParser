@@ -63,9 +63,6 @@ is recognised and executable by the interpreter. However, there are some signifi
 * Error messages
     - The interpreter can only give automatically generated parsing errors, and cannot yet give proper errors regarding
     issues in the execution itself. I will address the solution to this in a blog post.
-* Conditions within Loops
-    - There is a bug wherein conditionals within loops fail to be parsed. I am still investigating the cause of this
-    issue.
 * `Not` operator
     - The current operator implementation is dependent on operators being binary operators, however the `not` or `!`
     operator is a unary prefix operator, and so it's currently not able to be implemented. This can be fixed by changing
